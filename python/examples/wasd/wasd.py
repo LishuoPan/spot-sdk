@@ -40,12 +40,15 @@ from bosdyn.client.robot_command import RobotCommandBuilder, RobotCommandClient
 from bosdyn.client.robot_state import RobotStateClient
 from bosdyn.client.time_sync import TimeSyncError
 from bosdyn.util import duration_str, format_metric, secs_to_hms
+from bosdyn.client.frame_helpers import GRAV_ALIGNED_BODY_FRAME_NAME, ODOM_FRAME_NAME, get_a_tform_b
+from bosdyn.client import math_helpers
+
 
 LOGGER = logging.getLogger()
 
-VELOCITY_BASE_SPEED = 0.5  # m/s
-VELOCITY_BASE_ANGULAR = 0.8  # rad/sec
-VELOCITY_CMD_DURATION = 0.6  # seconds
+VELOCITY_BASE_SPEED = 0.2  # m/s
+VELOCITY_BASE_ANGULAR = 0.2  # rad/sec
+VELOCITY_CMD_DURATION = 0.3  # seconds
 COMMAND_INPUT_RATE = 0.1
 
 
@@ -223,7 +226,9 @@ class WasdInterface(object):
             ord('O'): self._image_task.toggle_video_mode,
             ord('u'): self._unstow,
             ord('j'): self._stow,
-            ord('l'): self._toggle_lease
+            ord('l'): self._toggle_lease,
+            ord('o'): self._open_arm,
+            ord('B'): self._move_arm
         }
         self._locked_messages = ['', '', '']  # string: displayed message for user
         self._estop_keepalive = None
@@ -456,6 +461,81 @@ class WasdInterface(object):
 
     def _stow(self):
         self._start_robot_command('stow', RobotCommandBuilder.arm_stow_command())
+
+    def _open_arm(self):
+        self._start_robot_command('stow', RobotCommandBuilder.claw_gripper_open_fraction_command(1.0))
+
+    def _move_arm(self): 
+        #    # Make the arm pose RobotCommand
+        # # Build a position to move the arm to (in meters, relative to and expressed in the gravity aligned body frame).
+        # x = 0.7
+        # y = 0
+        # z = 0
+        # hand_ewrt_flat_body = geometry_pb2.Vec3(x=x, y=y, z=z)
+
+        # # Rotation as a quaternion
+        # qw = 1
+        # qx = 0
+        # qy = 0
+        # qz = 0
+        # flat_body_Q_hand = geometry_pb2.Quaternion(w=qw, x=qx, y=qy, z=qz)
+
+        # flat_body_T_hand = geometry_pb2.SE3Pose(position=hand_ewrt_flat_body,
+        #                                         rotation=flat_body_Q_hand)
+
+        # odom_T_flat_body = get_a_tform_b(self.robot_state.kinematic_state.transforms_snapshot,
+        #                                  ODOM_FRAME_NAME, GRAV_ALIGNED_BODY_FRAME_NAME)
+
+        # odom_T_hand = odom_T_flat_body * math_helpers.SE3Pose.from_obj(flat_body_T_hand)
+
+        # # duration in seconds
+        # seconds = 2
+
+        # arm_command = RobotCommandBuilder.arm_pose_command(
+        #     odom_T_hand.x, odom_T_hand.y, odom_T_hand.z, odom_T_hand.rot.w, odom_T_hand.rot.x,
+        #     odom_T_hand.rot.y, odom_T_hand.rot.z, ODOM_FRAME_NAME, seconds)
+
+   
+        # self._start_robot_command('stow', arm_command)
+
+
+           # Make the arm pose RobotCommand
+        # Build a position to move the arm to (in meters, relative to and expressed in the gravity aligned body frame).
+        x = 0.7
+        y = 0
+        z = 0
+        hand_ewrt_flat_body = geometry_pb2.Vec3(x=x, y=y, z=z)
+
+        # Rotation as a quaternion
+        qw = 1
+        qx = 0
+        qy = 0
+        qz = 0
+        flat_body_Q_hand = geometry_pb2.Quaternion(w=qw, x=qx, y=qy, z=qz)
+
+        flat_body_T_hand = geometry_pb2.SE3Pose(position=hand_ewrt_flat_body,
+                                                rotation=flat_body_Q_hand)
+
+        odom_T_flat_body = get_a_tform_b(self.robot_state.kinematic_state.transforms_snapshot,
+                                         ODOM_FRAME_NAME, GRAV_ALIGNED_BODY_FRAME_NAME)
+
+        odom_T_hand = odom_T_flat_body * math_helpers.SE3Pose.from_obj(flat_body_T_hand)
+
+        # duration in seconds
+        seconds = 2
+
+        arm_command = RobotCommandBuilder.arm_pose_command(
+            x, y, z, qw, qx,
+            qy, qz, "body", seconds)
+
+   
+        self._start_robot_command('stow', arm_command)
+
+
+
+    
+    # def _move_arm(self): 
+    #     self.
 
     def _unstow(self):
         self._start_robot_command('stow', RobotCommandBuilder.arm_ready_command())
