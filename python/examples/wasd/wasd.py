@@ -206,6 +206,10 @@ class WasdInterface(object):
         self._image_task = AsyncImageCapture(robot)
         self._async_tasks = AsyncTasks([self._robot_state_task, self._image_task])
         self._lock = threading.Lock()
+
+        self.move_step_counter = 0
+        self.path = None
+
         self._command_dictionary = {
             27: self._stop,  # ESC key
             ord('\t'): self._quit_program,
@@ -228,7 +232,10 @@ class WasdInterface(object):
             ord('j'): self._stow,
             ord('l'): self._toggle_lease,
             ord('o'): self._open_arm,
-            ord('B'): self._move_arm
+            ord('B'): self._move_arm,
+            ord('p'): self._plan_robot,
+            ord('m'): self._move_robot_step,
+            ord('M'): self._move_robot_all
         }
         self._locked_messages = ['', '', '']  # string: displayed message for user
         self._estop_keepalive = None
@@ -238,8 +245,21 @@ class WasdInterface(object):
         self._robot_id = None
         self._lease_keepalive = None
 
+        self.parent_dir = "../../../../robot/spot_data_/"
+        self.colmap_scale = 3
+        self.ts = None
+        self.qs = None
+        self.o2n = None
+        self.offset = None
+
     def start(self):
         """Begin communication with the robot."""
+
+        # read T and Q from odom
+        self.ts = np.load(os.path.join(self.parent_dir, "arr_2.npy"))
+        self.qs = np.load(os.path.join(self.parent_dir, "arr_3.npy"))
+        self.o2n, self.offset = get_odom_to_nerf_matrix(self.parent_dir, self.ts, self.qs, self.colmap_scale)
+
         # Construct our lease keep-alive object, which begins RetainLease calls in a thread.
         self._lease_keepalive = LeaseKeepAlive(self._lease_client, must_acquire=True,
                                                return_at_exit=True)
@@ -532,10 +552,78 @@ class WasdInterface(object):
         self._start_robot_command('stow', arm_command)
 
 
+    def block_for_trajectory_cmd(command_client, cmd_id, timeout_sec=None, verbose=False):
+        start_time = time.time()
+        if timeout_sec is not None:
+            end_time = start_time + timeout_sec
+        now = time.time()
 
-    
-    # def _move_arm(self): 
-    #     self.
+        while timeout_sec is None or now < end_time:
+            feedback_resp = command_client.robot_command_feedback(cmd_id)
+
+            current_state = feedback_resp.feedback.mobility_feedback.se2_trajectory_feedback.status
+
+            if verbose:
+                current_state_str = basic_command_pb2.SE2TrajectoryCommand.Feedback.Status.Name(current_state)
+
+                current_time = time.time()
+                print('Walking: ({time:.1f} sec): {state}'.format(
+                    time=current_time - start_time, state=current_state_str),
+                    end='                \r')
+
+            if current_state == basic_command_pb2.SE2TrajectoryCommand.Feedback.STATUS_AT_GOAL:
+                return True
+
+            time.sleep(0.1)
+            now = time.time()
+
+        if verbose:
+            print('block_for_trajectory_cmd: timeout exceeded.')
+
+        return False
+
+
+    def _plan_robot(self): 
+
+        robot_cur_odom = get_vision_tform_body(self.robot_state.kinematic_state.transforms_snapshot)
+
+        start = np.array([odom.position.x, odom.position.y])
+        goal = np.array([8, 8])
+        rrt_star = RRTStar(100, start, goal)
+        rrt_star.run()
+        rrt_star.getBestPath()
+        path_mat = rrt_star.plotAll()
+        self.path = path_mat
+
+    def _move_robot_all(self): 
+        while (self.move_step_counter < self.path.size): 
+            self._move_robot_step()
+            time.sleep(0.01)
+
+    def _move_robot_step(self): 
+
+        if self.path == None:
+            return
+        #  target_x = self.target_x[move_step_counter]
+        #  target_y = self.target_y[move_step_counter]
+        target_x = self.path[move_step_counter][0]
+        target_y = self.path[move_step_counter][1]
+        self.move_step_counter += 1
+        execution_time = 5.0
+
+        move_cmd = RobotCommandBuilder.trajectory_command(
+                goal_x=target_x,
+                goal_y=target_y,
+                goal_heading=heading_rt_vision)
+        end_time = execution_time
+        cmd_id = self._robot_command_client.robot_command(command=move_cmd,
+                end_time_secs=time.time() +
+                end_time)
+
+        move_to_goal_success = block_for_trajectory_cmd(self._robot_command_client, cmd_id, timeout_sec=execution_time, verbose=True)
+
+        if not move_to_goal_success: 
+            move_step_counter -= 1
 
     def _unstow(self):
         self._start_robot_command('stow', RobotCommandBuilder.arm_ready_command())
