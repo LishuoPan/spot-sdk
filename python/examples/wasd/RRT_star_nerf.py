@@ -3,6 +3,11 @@ import hnswlib
 import tqdm
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
+import sys
+sys.path.insert(0, "../../../../nerf-navigation/NeRF/ngp_pl")  # TODO
+from odom_to_ngp import odom_to_nerf
+from get_density import ngp_model
+
 class Node:
     def __init__(self, location, cost = np.inf, parent = None, child = None):
         self.location = location
@@ -18,12 +23,19 @@ class Node:
 
 
 class RRTStar:
-    def __init__(self, n, start, goal):
+    def __init__(self, n, start, height, goal, map_model_checkpoint_path, rotation_o2n, offset_o2n, scale):
         self.path_found = False
         # robot info
-        self.robot_height = 1  # TODO fix this value.
+        self.robot_height = height
         self.robot_config_radius = 0.7
         self.collision_point_could_density_threshold = 0.5
+        self.orientation = np.array([1,0,0,0])
+
+        # nerf info
+        self.rotation_o2n = rotation_o2n
+        self.offset_o2n = offset_o2n
+        # self.scale = scale
+        self.map_model = ngp_model(scale, map_model_checkpoint_path)
 
         # map info
         self.h = 20
@@ -90,10 +102,20 @@ class RRTStar:
         cost = np.linalg.norm(x1 - x2)
         return cost
 
+    def coordinate_odom_to_comap(self, coordinates):
+        # coordinate [n,3]
+        cur_position = coordinates
+        cur_orientation = np.repeat(self.orientation[np.newaxis, :], coordinates.shape[0], axis=0)
+        poses = odom_to_nerf(None, cur_position, cur_orientation, self.rotation_o2n, self.offset_o2n, to_npg=True)
+        return poses  # [n,3]
+
     def mapping(self, coordinates):
+        comap_coordinates = self.coordinate_odom_to_comap(coordinates)  # [n,3]
+        # move the data to gpu
+        comap_coordinates_gpu = comap_coordinates.cuda()
         num_points = coordinates.shape[0]
-        densities = np.zeros((num_points, 1))
-        return densities
+        densities = self.map_model.get_density(comap_coordinates_gpu)
+        return densities  # [n,1]
 
     def is_in_collision(self, x, num_point_cloud=50):  # TODO modify this function
         # returns True if state x of the robot is incollision with any of the
@@ -109,6 +131,15 @@ class RRTStar:
         r = self.robot_config_radius * np.random.rand(num_point_cloud) ** (1/3)
         norm = (u*u + v*v + w*w)**(1/2)
         point_could_coordinates = aug_x[np.newaxis, :] + r[:, np.newaxis] / (norm[:, np.newaxis]) * np.stack((u, v, w)).transpose()  # [n, 3]
+
+        # filter out the points under ground.
+        ground_level = 0.1
+        point_cloud_filter = []
+        filtered_out_row = point_could_coordinates[:, 2] < ground_level
+        for i in range(point_could_coordinates.shape[0]):
+            if filtered_out_row[i] == False:
+                point_cloud_filter.append(point_could_coordinates[i])
+        point_could_coordinates = np.array(point_cloud_filter) # TODO check this dimension
 
         # query the map to get the density
         densities = self.mapping(point_could_coordinates)  # [n, 1]
@@ -300,8 +331,10 @@ class RRTStar:
 
 if __name__ == '__main__':
     start = np.array([7, -3])
+    height = 1
     goal = np.array([8, 8])
-    rrt_star = RRTStar(100, start, goal)
+    rrt_star = RRTStar(100, start, height, goal)
+    map_model_checkpoint = ""
 
     rrt_star.run()
     # V_loc_mat = np.vstack(rrt_star.V_location)
