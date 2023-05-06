@@ -250,9 +250,9 @@ class WasdInterface(object):
         self._robot_id = None
         self._lease_keepalive = None
 
-        self.parent_dir = "../../../../robot/spot_data_/"
-        self.mapping_path = "" # TODO
-        self.colmap_scale = 3
+        self.parent_dir = "../../../../spot_data/" # TODO
+        self.mapping_path = "../../../../spot_data/ckpts/spot_online/Spot/0_slim.ckpt" # TODO
+        self.colmap_scale = 0.5
         self.ts = None
         self.qs = None
         self.o2n = None
@@ -264,7 +264,7 @@ class WasdInterface(object):
         # read T and Q from odom
         self.ts = np.load(os.path.join(self.parent_dir, "arr_2.npy"))
         self.qs = np.load(os.path.join(self.parent_dir, "arr_3.npy"))
-        self.o2n, self.offset = get_odom_to_nerf_matrix(self.parent_dir, self.ts, self.qs, self.colmap_scale)
+        self.o2n, self.offset = get_odom_to_nerf_matrix(self.parent_dir, self.ts, self.qs)
 
         # Construct our lease keep-alive object, which begins RetainLease calls in a thread.
         self._lease_keepalive = LeaseKeepAlive(self._lease_client, must_acquire=True,
