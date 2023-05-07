@@ -17,7 +17,7 @@ import os
 import signal
 import sys
 sys.path.insert(0, "../../../../nerf-navigation/NeRF/ngp_pl")  # TODO
-from odom_to_ngp import get_odom_to_nerf_matrix
+# from odom_to_ngp import get_odom_to_nerf_matrix
 from RRT_star_nerf import *
 import threading
 import time
@@ -212,7 +212,7 @@ class WasdInterface(object):
         self._async_tasks = AsyncTasks([self._robot_state_task, self._image_task])
         self._lock = threading.Lock()
 
-        self.move_step_counter = 0
+        self.move_step_counter = 1
         self.path = None
 
         self._command_dictionary = {
@@ -554,7 +554,7 @@ class WasdInterface(object):
         self._start_robot_command('stow', arm_command)
 
 
-    def block_for_trajectory_cmd(command_client, cmd_id, timeout_sec=None, verbose=False):
+    def block_for_trajectory_cmd(self, command_client, cmd_id, timeout_sec=None, verbose=False):
         start_time = time.time()
         if timeout_sec is not None:
             end_time = start_time + timeout_sec
@@ -595,40 +595,62 @@ class WasdInterface(object):
         robot_cur_odom = get_vision_tform_body(self.robot_state.kinematic_state.transforms_snapshot)
 
         start = np.array([robot_cur_odom.position.x, robot_cur_odom.position.y])
-        goal = np.array([4, 0])
-        rrt_star = RRTStar(100, start, goal, self.mapping_checkpoint_path, self.o2n, self.offset, self.colmap_scale)
+        goal = np.array([2.5, -3])
+        rrt_star = RRTStar(100, start, goal)
         rrt_star.run()
         rrt_star.getBestPath()
         path_mat = rrt_star.plotAll()
         self.path = path_mat
+        LOGGER.info(self.path)
+        self.move_step_counter = 1
+
+
+        # self._move_robot_step()
 
     def _move_robot_all(self): 
+
+        LOGGER.error("go into move_eobot_all function")
         while (self.move_step_counter < self.path.size): 
             self._move_robot_step()
-            time.sleep(0.01)
+            time.sleep(0.1)
 
     def _move_robot_step(self): 
+        
+        # LOGGER.info("Inside move")
+        # LOGGER.info(self.path)
+        # LOGGER.info(self.path.shape)
 
-        if self.path == None:
-            return
-        #  target_x = self.target_x[move_step_counter]
-        #  target_y = self.target_y[move_step_counter]
-        target_x = self.path[move_step_counter][0]
-        target_y = self.path[move_step_counter][1]
-        self.move_step_counter += 1
-        execution_time = 10.0
+        # if self.path == None:
+        #     return
+        
+        if self.move_step_counter < self.path.size: 
+            # self.move_step_counter = 1
+        
+            #  target_x = self.target_x[move_step_counter]
+            #  target_y = self.target_y[move_step_counter]
+            target_x = self.path[self.move_step_counter][0]
+            target_y = self.path[self.move_step_counter][1]
+            self.move_step_counter += 1
+            execution_time = 10.0
 
-        move_cmd = RobotCommandBuilder.trajectory_command(
-                goal_x=target_x,
-                goal_y=target_y,
-                goal_heading=heading_rt_vision)
-        end_time = execution_time
-        cmd_id = self._robot_command_client.robot_command(command=move_cmd)
+            LOGGER.info("target-x")
+            LOGGER.info(target_x)
 
-        move_to_goal_success = block_for_trajectory_cmd(self._robot_command_client, cmd_id, timeout_sec=execution_time, verbose=True)
+            move_cmd = RobotCommandBuilder.trajectory_command(
+                    frame_name=VISION_FRAME_NAME,
+                    goal_x=target_x,
+                    goal_y=target_y,
+                    goal_heading=0, locomotion_hint=4)
+            end_time = execution_time
+            cmd_id = self._robot_command_client.robot_command(command=move_cmd, end_time_secs=time.time()+end_time)
 
-        if not move_to_goal_success: 
-            move_step_counter -= 1
+            # LOGGER.error("Inside move after move")
+            # LOGGER.error(self.path)
+
+            move_to_goal_success = self.block_for_trajectory_cmd(self._robot_command_client, cmd_id, timeout_sec=execution_time, verbose=True)
+
+            if not move_to_goal_success: 
+                self.move_step_counter -= 1
 
     def _unstow(self):
         self._start_robot_command('stow', RobotCommandBuilder.arm_ready_command())
