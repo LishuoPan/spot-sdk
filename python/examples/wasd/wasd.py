@@ -9,12 +9,16 @@
 from __future__ import print_function
 
 import curses
+import numpy as np
 import io
 import logging
 import math
 import os
 import signal
 import sys
+sys.path.insert(0, "../../../../nerf-navigation/NeRF/ngp_pl")  # TODO
+from odom_to_ngp import get_odom_to_nerf_matrix
+from RRT_star_nerf import *
 import threading
 import time
 from collections import OrderedDict
@@ -42,6 +46,7 @@ from bosdyn.client.time_sync import TimeSyncError
 from bosdyn.util import duration_str, format_metric, secs_to_hms
 from bosdyn.client.frame_helpers import GRAV_ALIGNED_BODY_FRAME_NAME, ODOM_FRAME_NAME, get_a_tform_b
 from bosdyn.client import math_helpers
+from bosdyn.client.frame_helpers import VISION_FRAME_NAME, get_vision_tform_body, get_a_tform_b, get_odom_tform_body
 
 
 LOGGER = logging.getLogger()
@@ -246,8 +251,9 @@ class WasdInterface(object):
         self._robot_id = None
         self._lease_keepalive = None
 
-        self.parent_dir = "../../../../robot/spot_data_/"
-        self.colmap_scale = 3
+        self.parent_dir = "../../../../spot_data/spot_data_0" # TODO
+        self.mapping_path = "../../../../spot_data/ckpts/spot_online/Spot/1_slim.ckpt" # TODO
+        self.colmap_scale = 0.5
         self.ts = None
         self.qs = None
         self.o2n = None
@@ -588,9 +594,9 @@ class WasdInterface(object):
 
         robot_cur_odom = get_vision_tform_body(self.robot_state.kinematic_state.transforms_snapshot)
 
-        start = np.array([odom.position.x, odom.position.y])
-        goal = np.array([8, 8])
-        rrt_star = RRTStar(100, start, goal)
+        start = np.array([robot_cur_odom.position.x, robot_cur_odom.position.y])
+        goal = np.array([4, 0])
+        rrt_star = RRTStar(100, start, goal, self.mapping_checkpoint_path, self.o2n, self.offset, self.colmap_scale)
         rrt_star.run()
         rrt_star.getBestPath()
         path_mat = rrt_star.plotAll()
