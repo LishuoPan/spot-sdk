@@ -235,7 +235,8 @@ class WasdInterface(object):
             ord('B'): self._move_arm,
             ord('p'): self._plan_robot,
             ord('m'): self._move_robot_step,
-            ord('M'): self._move_robot_all
+            ord('M'): self._move_robot_all,
+            ord('i'): self._build_o2n
         }
         self._locked_messages = ['', '', '']  # string: displayed message for user
         self._estop_keepalive = None
@@ -254,11 +255,6 @@ class WasdInterface(object):
 
     def start(self):
         """Begin communication with the robot."""
-
-        # read T and Q from odom
-        self.ts = np.load(os.path.join(self.parent_dir, "arr_2.npy"))
-        self.qs = np.load(os.path.join(self.parent_dir, "arr_3.npy"))
-        self.o2n, self.offset = get_odom_to_nerf_matrix(self.parent_dir, self.ts, self.qs, self.colmap_scale)
 
         # Construct our lease keep-alive object, which begins RetainLease calls in a thread.
         self._lease_keepalive = LeaseKeepAlive(self._lease_client, must_acquire=True,
@@ -582,6 +578,11 @@ class WasdInterface(object):
 
         return False
 
+    def _build_o2n(self): 
+        # read T and Q from odom
+        self.ts = np.load(os.path.join(self.parent_dir, "arr_2.npy"))
+        self.qs = np.load(os.path.join(self.parent_dir, "arr_3.npy"))
+        self.o2n, self.offset = get_odom_to_nerf_matrix(self.parent_dir, self.ts, self.qs, self.colmap_scale)
 
     def _plan_robot(self): 
 
@@ -609,16 +610,14 @@ class WasdInterface(object):
         target_x = self.path[move_step_counter][0]
         target_y = self.path[move_step_counter][1]
         self.move_step_counter += 1
-        execution_time = 5.0
+        execution_time = 10.0
 
         move_cmd = RobotCommandBuilder.trajectory_command(
                 goal_x=target_x,
                 goal_y=target_y,
                 goal_heading=heading_rt_vision)
         end_time = execution_time
-        cmd_id = self._robot_command_client.robot_command(command=move_cmd,
-                end_time_secs=time.time() +
-                end_time)
+        cmd_id = self._robot_command_client.robot_command(command=move_cmd)
 
         move_to_goal_success = block_for_trajectory_cmd(self._robot_command_client, cmd_id, timeout_sec=execution_time, verbose=True)
 
