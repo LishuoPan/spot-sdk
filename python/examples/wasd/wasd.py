@@ -16,7 +16,7 @@ import math
 import os
 import signal
 import sys
-sys.path.insert(0, "../../../../nerf-navigation/NeRF/ngp_pl")  # TODO
+# sys.path.insert(0, "../../../../nerf-navigation/NeRF/ngp_pl")  # TODO
 # from odom_to_ngp import get_odom_to_nerf_matrix
 from RRT_star_nerf import *
 import threading
@@ -596,7 +596,7 @@ class WasdInterface(object):
 
         start = np.array([robot_cur_odom.position.x, robot_cur_odom.position.y])
         goal = np.array([2.5, -3])
-        rrt_star = RRTStar(100, start, goal)
+        rrt_star = RRTStar(100, start, robot_cur_odom.position.z, goal, self.mapping_path, self.o2n, self.offset, scale=self.colmap_scale)
         rrt_star.run()
         rrt_star.getBestPath()
         path_mat = rrt_star.plotAll()
