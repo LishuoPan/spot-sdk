@@ -1,10 +1,12 @@
 import numpy as np
 import hnswlib
 import tqdm
-import matplotlib.pyplot as plt
-import matplotlib.patches as patches
+# import matplotlib.pyplot as plt
+# import matplotlib.patches as patches
 import sys
-sys.path.insert(0, "../../../../nerf-navigation/NeRF/ngp_pl")  # TODO
+sys.path.insert(0, "/home/lishuo_p14s/nerf-navigation/NeRF/ngp_pl")  # TODO
+print(sys.path)
+# sys.path.append("/home/lishuo_p14s/nerf-navigation/NeRF/ngp_pl")  # TODO
 from odom_to_ngp import odom_to_nerf
 from get_density import ngp_model
 
@@ -258,9 +260,9 @@ class RRTStar:
         V_loc_mat = np.vstack(self.V_location)
         V_par_mat = np.vstack(self.V_parent_loc)
         # init the plot
-        fig, ax = plt.subplots(1)
+        # fig, ax = plt.subplots(1)
         # first plot the pts
-        plt.scatter(V_loc_mat[:,0],V_loc_mat[:,1], s=0.2)
+        # plt.scatter(V_loc_mat[:,0],V_loc_mat[:,1], s=0.2)
 
         ## plot the path
         # from the final pt
@@ -276,38 +278,38 @@ class RRTStar:
             else:
                 root = True
         path_mat = np.vstack(path)
-        ax.plot(path_mat[:, 0], path_mat[:, 1],color="r")
-        #plot the tree
-        x_coor = np.vstack((V_loc_mat[1:,0], V_par_mat[:,0]))
-        y_coor = np.vstack((V_loc_mat[1:,1], V_par_mat[:,1]))
-        ax.plot(x_coor, y_coor,lw=0.1,color='g')
-        # plot the obstacle
-        # obstacle1 = np.asarray([[4, -4], [5, -4], [5, 9], [4, 9], [4, -4]])
-        # obstacle2 = np.asarray([[-6, -4], [0, -4], [0, -5], [-6, -5], [-6, -4]])
-        # plt.plot(obstacle1[:, 0], obstacle1[:, 1], 'b')
-        # plt.plot(obstacle2[:, 0], obstacle2[:, 1], 'b')
-        rect1 = patches.Rectangle((4, -4), 1, 13, linewidth=1,facecolor="y", edgecolor='y', lw=2)
-        rect2 = patches.Rectangle((3.4, -4.6), 2.2, 14.2, linewidth=1, facecolor="none", edgecolor='y', lw=1, ls='--')
-        rect3 = patches.Rectangle((-6, -5), 6, 1, linewidth=1,facecolor="y", edgecolor='y', lw=2)
-        rect4 = patches.Rectangle((-6.6, -5.6), 7.2, 2.2, linewidth=1, facecolor="none", edgecolor='y', lw=1, ls='--')
-        ax.add_patch(rect1)
-        ax.add_patch(rect2)
-        ax.add_patch(rect3)
-        ax.add_patch(rect4)
+        # ax.plot(path_mat[:, 0], path_mat[:, 1],color="r")
+        # #plot the tree
+        # x_coor = np.vstack((V_loc_mat[1:,0], V_par_mat[:,0]))
+        # y_coor = np.vstack((V_loc_mat[1:,1], V_par_mat[:,1]))
+        # ax.plot(x_coor, y_coor,lw=0.1,color='g')
+        # # plot the obstacle
+        # # obstacle1 = np.asarray([[4, -4], [5, -4], [5, 9], [4, 9], [4, -4]])
+        # # obstacle2 = np.asarray([[-6, -4], [0, -4], [0, -5], [-6, -5], [-6, -4]])
+        # # plt.plot(obstacle1[:, 0], obstacle1[:, 1], 'b')
+        # # plt.plot(obstacle2[:, 0], obstacle2[:, 1], 'b')
+        # rect1 = patches.Rectangle((4, -4), 1, 13, linewidth=1,facecolor="y", edgecolor='y', lw=2)
+        # rect2 = patches.Rectangle((3.4, -4.6), 2.2, 14.2, linewidth=1, facecolor="none", edgecolor='y', lw=1, ls='--')
+        # rect3 = patches.Rectangle((-6, -5), 6, 1, linewidth=1,facecolor="y", edgecolor='y', lw=2)
+        # rect4 = patches.Rectangle((-6.6, -5.6), 7.2, 2.2, linewidth=1, facecolor="none", edgecolor='y', lw=1, ls='--')
+        # ax.add_patch(rect1)
+        # ax.add_patch(rect2)
+        # ax.add_patch(rect3)
+        # ax.add_patch(rect4)
 
-        # plot the start point and end point
-        plt.scatter(self.start[0], self.start[1], s=120, color="b", alpha=0.5)
-        plt.scatter(self.goal[0], self.goal[1], s=100, color="g", alpha=0.5)
+        # # plot the start point and end point
+        # plt.scatter(self.start[0], self.start[1], s=120, color="b", alpha=0.5)
+        # plt.scatter(self.goal[0], self.goal[1], s=100, color="g", alpha=0.5)
 
-        plt.title("map")
-        plt.show()
+        # plt.title("map")
+        # plt.show()
 
-        plt.plot(self.best_cost)
-        plt.title("cost v.s. iteration")
-        plt.xlabel("iterations")
-        plt.ylabel("cost")
-        plt.show()
-        return path_mat
+        # plt.plot(self.best_cost)
+        # plt.title("cost v.s. iteration")
+        # plt.xlabel("iterations")
+        # plt.ylabel("cost")
+        # plt.show()
+        return np.flip(path_mat, 0)
 
     def run(self):
         sample_iter = 0
