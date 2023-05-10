@@ -269,7 +269,7 @@ class RRTStar:
 
     def getBestPath(self):
         clist = []
-        X_near_goal = self.findNearSet(self.goal, 0.6)
+        X_near_goal = self.findNearSet(self.goal, 0.3)
         if len(X_near_goal) == 0:
             self.best_cost.append(np.inf)
         else:
