@@ -8,6 +8,7 @@
 
 from __future__ import print_function
 
+import traceback
 import curses
 import numpy as np
 import io
@@ -241,7 +242,8 @@ class WasdInterface(object):
             ord('p'): self._plan_robot,
             ord('m'): self._move_robot_step,
             ord('M'): self._move_robot_all,
-            ord('i'): self._build_o2n
+            ord('i'): self._build_o2n,
+            ord('c'): self._current_position
         }
         self._locked_messages = ['', '', '']  # string: displayed message for user
         self._estop_keepalive = None
@@ -251,8 +253,8 @@ class WasdInterface(object):
         self._robot_id = None
         self._lease_keepalive = None
 
-        self.parent_dir = "../../../../spot_data/spot_data_0" # TODO
-        self.mapping_path = "../../../../spot_data/ckpts/spot_online/Spot/1_slim.ckpt" # TODO
+        self.parent_dir = "../../../../spot_data/" # TODO
+        self.mapping_path = "../../../../spot_data/ckpts/spot_online/Spot/2_slim.ckpt" # TODO
         self.colmap_scale = 0.5
         self.ts = None
         self.qs = None
@@ -487,6 +489,11 @@ class WasdInterface(object):
     def _open_arm(self):
         self._start_robot_command('stow', RobotCommandBuilder.claw_gripper_open_fraction_command(1.0))
 
+    def _current_position(self):
+        robot_cur_odom = get_vision_tform_body(self.robot_state.kinematic_state.transforms_snapshot)
+        LOGGER.info([robot_cur_odom.position.x, robot_cur_odom.position.y, robot_cur_odom.position.z])
+        # start = np.array([robot_cur_odom.position.x, robot_cur_odom.position.y])
+    
     def _move_arm(self): 
         #    # Make the arm pose RobotCommand
         # # Build a position to move the arm to (in meters, relative to and expressed in the gravity aligned body frame).
@@ -591,12 +598,16 @@ class WasdInterface(object):
         self.o2n, self.offset = get_odom_to_nerf_matrix(self.parent_dir, self.ts, self.qs, self.colmap_scale)
 
     def _plan_robot(self): 
+        
+        self.ts = np.load(os.path.join(self.parent_dir, "arr_2.npy"))
+        self.qs = np.load(os.path.join(self.parent_dir, "arr_3.npy"))
+        self.o2n, self.offset = get_odom_to_nerf_matrix(self.parent_dir, self.ts, self.qs, self.colmap_scale)
 
         robot_cur_odom = get_vision_tform_body(self.robot_state.kinematic_state.transforms_snapshot)
 
         start = np.array([robot_cur_odom.position.x, robot_cur_odom.position.y])
-        goal = np.array([2.5, -3])
-        rrt_star = RRTStar(100, start, robot_cur_odom.position.z, goal, self.mapping_path, self.o2n, self.offset, scale=self.colmap_scale)
+        goal = np.array([5.0, 0])
+        rrt_star = RRTStar(150, start, robot_cur_odom.position.z + 0.72, goal, self.mapping_path, self.o2n, self.offset, scale=self.colmap_scale)
         rrt_star.run()
         rrt_star.getBestPath()
         path_mat = rrt_star.plotAll()
@@ -845,6 +856,8 @@ def main():
             LOGGER.addHandler(stream_handler)
     except Exception as e:
         LOGGER.error("WASD has thrown an error: [%r] %s", e, e)
+        LOGGER.error(traceback.format_exc())
+
     finally:
         # Do any final cleanup steps.
         wasd_interface.shutdown()

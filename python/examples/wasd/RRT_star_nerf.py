@@ -1,14 +1,18 @@
 import numpy as np
 import hnswlib
 import tqdm
-# import matplotlib.pyplot as plt
-# import matplotlib.patches as patches
+import matplotlib.pyplot as plt
+import matplotlib.patches as patches
 import sys
-sys.path.insert(0, "/home/lishuo_p14s/nerf-navigation/NeRF/ngp_pl")  # TODO
+import os
+# sys.path.insert(0, "/home/lishuo_p14s/nerf-navigation/NeRF/ngp_pl")  # TODO
+sys.path.insert(0, "/home/rahulsajnani/Education/Brown/1_sem2/52-O/project/nerf-navigation/NeRF/ngp_pl")  # TODO
+
 print(sys.path)
 # sys.path.append("/home/lishuo_p14s/nerf-navigation/NeRF/ngp_pl")  # TODO
-from odom_to_ngp import odom_to_nerf
+from odom_to_ngp import odom_to_nerf, get_odom_to_nerf_matrix
 from get_density import ngp_model
+import torch
 
 class Node:
     def __init__(self, location, cost = np.inf, parent = None, child = None):
@@ -29,8 +33,8 @@ class RRTStar:
         self.path_found = False
         # robot info
         self.robot_height = height
-        self.robot_config_radius = 0.7
-        self.collision_point_could_density_threshold = 0.5
+        self.robot_config_radius = 0.9
+        self.collision_point_could_density_threshold = 190/255
         self.orientation = np.array([1,0,0,0])
 
         # nerf info
@@ -40,8 +44,8 @@ class RRTStar:
         self.map_model = ngp_model(scale, map_model_checkpoint_path)
 
         # map info
-        self.h = 20
-        self.w = 20
+        self.h = 5
+        self.w = 7
         # self.sx = 0
         # self.sy = 0
         self.start = start
@@ -94,9 +98,13 @@ class RRTStar:
         # returns a state x that is sampled uniformly randomly from the domain
         collision = True
         while collision:
-            sample = np.random.uniform(0 - self.w/2, 0 + self.w/2, 2)
+            # print("sample once")
+            sample_x = np.random.uniform(0, self.w, 1)
+            sample_y = np.random.uniform(-self.h / 2, self.h / 2, 1)
+            sample = np.append(sample_x, sample_y)
+            # sample = np.array([2.6, -0.4])            
             collision = self.is_in_collision(sample)
-
+            # print(collision)
         return sample
 
     def steer(self, x1, x2):
@@ -108,18 +116,25 @@ class RRTStar:
         # coordinate [n,3]
         cur_position = coordinates
         cur_orientation = np.repeat(self.orientation[np.newaxis, :], coordinates.shape[0], axis=0)
-        poses = odom_to_nerf(None, cur_position, cur_orientation, self.rotation_o2n, self.offset_o2n, to_npg=True)
-        return poses  # [n,3]
+        poses = odom_to_nerf(None, cur_position, cur_orientation, self.rotation_o2n, self.offset_o2n, to_ngp=True)
+        
+        return poses[:, :3, -1]
+        
+        # return coordinates_colmap[..., 0]  # [n,3]
 
     def mapping(self, coordinates):
         comap_coordinates = self.coordinate_odom_to_comap(coordinates)  # [n,3]
         # move the data to gpu
-        comap_coordinates_gpu = comap_coordinates.cuda()
+        comap_coordinates_gpu = torch.tensor(comap_coordinates).cuda()
         num_points = coordinates.shape[0]
-        densities = self.map_model.get_density(comap_coordinates_gpu)
+        # print("comap_coordinates_gpu", comap_coordinates_gpu.shape)
+        
+        with torch.no_grad():
+            densities = self.map_model.get_density(comap_coordinates_gpu)
+        
         return densities  # [n,1]
 
-    def is_in_collision(self, x, num_point_cloud=50):  # TODO modify this function
+    def is_in_collision(self, x, num_point_cloud=100):  # TODO modify this function
         # returns True if state x of the robot is incollision with any of the
         # obstacles
 
@@ -135,7 +150,7 @@ class RRTStar:
         point_could_coordinates = aug_x[np.newaxis, :] + r[:, np.newaxis] / (norm[:, np.newaxis]) * np.stack((u, v, w)).transpose()  # [n, 3]
 
         # filter out the points under ground.
-        ground_level = 0.1
+        ground_level = 0
         point_cloud_filter = []
         filtered_out_row = point_could_coordinates[:, 2] < ground_level
         for i in range(point_could_coordinates.shape[0]):
@@ -143,12 +158,22 @@ class RRTStar:
                 point_cloud_filter.append(point_could_coordinates[i])
         point_could_coordinates = np.array(point_cloud_filter) # TODO check this dimension
 
+        
+        # print(point_could_coordinates)
+        
         # query the map to get the density
-        densities = self.mapping(point_could_coordinates)  # [n, 1]
-        assert(densities.shape == (num_point_cloud, 1))
+        # densities_numpy = self.mapping(point_could_coordinates)[..., None].cpu().detach().numpy()
+        # print("max of density:", np.max(densities_numpy))
+        # print("min of density:", np.min(densities_numpy))
+        densities = 1.0 - np.exp(-self.mapping(point_could_coordinates)[..., None].cpu().detach().numpy())  # [n, 1]
+        # print(densities.shape)
+        # assert(densities.shape == (num_point_cloud, 1))
 
+        # print("start collision checking")
+        
         # judge if the point is a valid sample
         avg_density = np.sum(densities) / num_point_cloud
+        # print(avg_density)
         if avg_density > self.collision_point_could_density_threshold:
             return True
         else:
@@ -159,17 +184,18 @@ class RRTStar:
         p = x1; r = x2-x1;
 
         # use the sampling method to decide if path is collide with mapping
-        collision_check_distance = 0.5
+        collision_check_distance = 0.2
         point_distance = np.linalg.norm(r)
         num_checks = int(np.ceil(point_distance // collision_check_distance))
         xx = np.linspace(x1[0], x2[0], num_checks+2)[1:-1]
         yy = np.linspace(x1[1], x2[1], num_checks+2)[1:-1]
-
+        # print("xx shape", xx.shape)
+        
         for x, y in zip(xx, yy):
             collide = self.is_in_collision(np.append(x, y))
             if collide:
                 return True
-
+        # print("path collision check finished")lishuo_p14s
         return False
 
 
@@ -260,9 +286,9 @@ class RRTStar:
         V_loc_mat = np.vstack(self.V_location)
         V_par_mat = np.vstack(self.V_parent_loc)
         # init the plot
-        # fig, ax = plt.subplots(1)
+        fig, ax = plt.subplots(1)
         # first plot the pts
-        # plt.scatter(V_loc_mat[:,0],V_loc_mat[:,1], s=0.2)
+        plt.scatter(V_loc_mat[:,0],V_loc_mat[:,1], s=0.2)
 
         ## plot the path
         # from the final pt
@@ -278,16 +304,16 @@ class RRTStar:
             else:
                 root = True
         path_mat = np.vstack(path)
-        # ax.plot(path_mat[:, 0], path_mat[:, 1],color="r")
-        # #plot the tree
-        # x_coor = np.vstack((V_loc_mat[1:,0], V_par_mat[:,0]))
-        # y_coor = np.vstack((V_loc_mat[1:,1], V_par_mat[:,1]))
-        # ax.plot(x_coor, y_coor,lw=0.1,color='g')
-        # # plot the obstacle
-        # # obstacle1 = np.asarray([[4, -4], [5, -4], [5, 9], [4, 9], [4, -4]])
-        # # obstacle2 = np.asarray([[-6, -4], [0, -4], [0, -5], [-6, -5], [-6, -4]])
-        # # plt.plot(obstacle1[:, 0], obstacle1[:, 1], 'b')
-        # # plt.plot(obstacle2[:, 0], obstacle2[:, 1], 'b')
+        ax.plot(path_mat[:, 0], path_mat[:, 1],color="r")
+        #plot the tree
+        x_coor = np.vstack((V_loc_mat[1:,0], V_par_mat[:,0]))
+        y_coor = np.vstack((V_loc_mat[1:,1], V_par_mat[:,1]))
+        ax.plot(x_coor, y_coor,lw=0.1,color='g')
+        # plot the obstacle
+        # obstacle1 = np.asarray([[4, -4], [5, -4], [5, 9], [4, 9], [4, -4]])
+        # obstacle2 = np.asarray([[-6, -4], [0, -4], [0, -5], [-6, -5], [-6, -4]])
+        # plt.plot(obstacle1[:, 0], obstacle1[:, 1], 'b')
+        # plt.plot(obstacle2[:, 0], obstacle2[:, 1], 'b')
         # rect1 = patches.Rectangle((4, -4), 1, 13, linewidth=1,facecolor="y", edgecolor='y', lw=2)
         # rect2 = patches.Rectangle((3.4, -4.6), 2.2, 14.2, linewidth=1, facecolor="none", edgecolor='y', lw=1, ls='--')
         # rect3 = patches.Rectangle((-6, -5), 6, 1, linewidth=1,facecolor="y", edgecolor='y', lw=2)
@@ -297,23 +323,26 @@ class RRTStar:
         # ax.add_patch(rect3)
         # ax.add_patch(rect4)
 
-        # # plot the start point and end point
-        # plt.scatter(self.start[0], self.start[1], s=120, color="b", alpha=0.5)
-        # plt.scatter(self.goal[0], self.goal[1], s=100, color="g", alpha=0.5)
+        # plot the start point and end point
+        plt.scatter(self.start[0], self.start[1], s=120, color="b", alpha=0.5)
+        plt.scatter(self.goal[0], self.goal[1], s=100, color="g", alpha=0.5)
 
-        # plt.title("map")
-        # plt.show()
+        plt.title("map")
+        plt.show()
 
-        # plt.plot(self.best_cost)
-        # plt.title("cost v.s. iteration")
-        # plt.xlabel("iterations")
-        # plt.ylabel("cost")
-        # plt.show()
+        plt.plot(self.best_cost)
+        plt.title("cost v.s. iteration")
+        plt.xlabel("iterations")
+        plt.ylabel("cost")
+        plt.show()
         return np.flip(path_mat, 0)
 
     def run(self):
         sample_iter = 0
-        while (not self.path_found) or (sample_iter < self.n):
+        # while (not self.path_found) or (sample_iter < self.n):
+        #     if sample_iter % 1 == 0:
+        #         print("sample points: ", sample_iter, "/", self.n) 
+        for i in tqdm.tqdm(range(self.n)):
             x_rand_loc = self.sample()
             self.x_nearest = self.nearest(x_rand_loc)
 
@@ -332,10 +361,18 @@ class RRTStar:
             sample_iter += 1
 
 if __name__ == '__main__':
-    start = np.array([7, -3])
+    start = np.array([1.2, 0.2])
     height = 1
-    goal = np.array([8, 8])
-    rrt_star = RRTStar(100, start, height, goal)
+    goal = np.array([5, 0.2])
+    parent_dir = "../../../../spot_data/" # TODO
+    mapping_path = "../../../../spot_data/ckpts/spot_online/Spot/2_slim.ckpt" # TODO
+    
+    colmap_scale = 0.5
+    ts = np.load(os.path.join(parent_dir, "arr_2.npy"))
+    qs = np.load(os.path.join(parent_dir, "arr_3.npy"))
+    o2n, offset = get_odom_to_nerf_matrix(parent_dir, ts, qs, colmap_scale)
+    
+    rrt_star = RRTStar(150, start, height, goal, mapping_path, o2n, offset, scale=colmap_scale)
     map_model_checkpoint = ""
 
     rrt_star.run()
