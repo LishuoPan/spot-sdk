@@ -44,8 +44,8 @@ class RRTStar:
         self.map_model = ngp_model(scale, map_model_checkpoint_path)
 
         # map info
-        self.h = 5
-        self.w = 7
+        self.h = 4
+        self.w = 6
         # self.sx = 0
         # self.sy = 0
         self.start = start
@@ -60,7 +60,7 @@ class RRTStar:
 
         self.dim = 2
         self.n = n
-        self.r = min(50*(np.log(self.n)/self.n)**(1/self.dim), 4)
+        self.r = min(50*(np.log(self.n)/self.n)**(1/self.dim), 3)
 
         # self.joint_pts = [[np.array([3.4, 9.6]), np.array([3.4, -4.6])],
         #                   [np.array([3.4, 9.6]), np.array([5.6, 9.6])],
@@ -184,7 +184,7 @@ class RRTStar:
         p = x1; r = x2-x1;
 
         # use the sampling method to decide if path is collide with mapping
-        collision_check_distance = 0.2
+        collision_check_distance = 0.3
         point_distance = np.linalg.norm(r)
         num_checks = int(np.ceil(point_distance // collision_check_distance))
         xx = np.linspace(x1[0], x2[0], num_checks+2)[1:-1]
@@ -215,10 +215,22 @@ class RRTStar:
         diff_mat = self.V_location - x
         diff_vect = np.linalg.norm(diff_mat, axis=1)
         in_circle_idx = diff_vect < radius
-
+        
+        # comput the distance to the goal
+        goal_diff_mat = np.array(self.V_location)[in_circle_idx] - self.goal
+        goal_diff_vect = np.linalg.norm(goal_diff_mat, axis=1)
+        argsort = np.argsort(goal_diff_vect)
+        
+        num_neighbor = np.sum(in_circle_idx)
+        
+        # goal_diff_mat = x - self.goal
+        
+        count = 0
         for idx, judge in enumerate(in_circle_idx):
             if judge:
-                near_set.append(self.V_node[idx])
+                if argsort[count] < num_neighbor/2:
+                    near_set.append(self.V_node[idx])
+                count += 1
 
         return near_set
 
@@ -269,7 +281,7 @@ class RRTStar:
 
     def getBestPath(self):
         clist = []
-        X_near_goal = self.findNearSet(self.goal, 0.3)
+        X_near_goal = self.findNearSet(self.goal, 0.2)
         if len(X_near_goal) == 0:
             self.best_cost.append(np.inf)
         else:
@@ -364,15 +376,19 @@ if __name__ == '__main__':
     start = np.array([1.2, 0.2])
     height = 1
     goal = np.array([5, 0.2])
-    parent_dir = "../../../../spot_data/" # TODO
-    mapping_path = "../../../../spot_data/ckpts/spot_online/Spot/2_slim.ckpt" # TODO
+    
+    # parent_dir = "../../../../spot_data/" # TODO
+    # mapping_path = "../../../../spot_data/ckpts/spot_online/Spot/1_slim.ckpt" # TODO
+    
+    parent_dir = "../../../../spot_data_best/spot_data/" # TODO
+    mapping_path = "../../../../spot_data_best/spot_data/ckpts/spot_online/Spot/2_slim.ckpt" # TODO
     
     colmap_scale = 0.5
     ts = np.load(os.path.join(parent_dir, "arr_2.npy"))
     qs = np.load(os.path.join(parent_dir, "arr_3.npy"))
     o2n, offset = get_odom_to_nerf_matrix(parent_dir, ts, qs, colmap_scale)
     
-    rrt_star = RRTStar(150, start, height, goal, mapping_path, o2n, offset, scale=colmap_scale)
+    rrt_star = RRTStar(120, start, height, goal, mapping_path, o2n, offset, scale=colmap_scale)
     map_model_checkpoint = ""
 
     rrt_star.run()
