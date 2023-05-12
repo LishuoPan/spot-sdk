@@ -274,8 +274,8 @@ class WasdInterface(object):
         self._robot_id = None
         self._lease_keepalive = None
 
-        self.parent_dir = "../../../../spot_data/" # TODO
-        self.mapping_path = "../../../../spot_data/ckpts/spot_online/Spot/2_slim.ckpt" # TODO
+        self.parent_dir = "../../../../spot_data_best/spot_data/" # TODO
+        self.mapping_path = "../../../../spot_data_best/spot_data/ckpts/spot_online/Spot/2_slim.ckpt" # TODO
         self.colmap_scale = 0.5
         self.ts = None
         self.qs = None
@@ -661,7 +661,7 @@ class WasdInterface(object):
     def _move_robot_all(self): 
 
         LOGGER.error("go into move_eobot_all function")
-        while (self.move_step_counter < self.path.size): 
+        while (self.move_step_counter < len(self.path)): 
             self._move_robot_step()
             time.sleep(0.1)
 
@@ -674,7 +674,7 @@ class WasdInterface(object):
         # if self.path == None:
         #     return
         
-        if self.move_step_counter < self.path.size: 
+        if self.move_step_counter < len(self.path): 
             # self.move_step_counter = 1
         
             #  target_x = self.target_x[move_step_counter]

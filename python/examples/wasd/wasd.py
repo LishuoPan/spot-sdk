@@ -254,7 +254,7 @@ class WasdInterface(object):
         self._lease_keepalive = None
 
         self.parent_dir = "../../../../spot_data/" # TODO
-        self.mapping_path = "../../../../spot_data/ckpts/spot_online/Spot/2_slim.ckpt" # TODO
+        self.mapping_path = "../../../../spot_data/ckpts/spot_online/Spot/1_slim.ckpt" # TODO
         self.colmap_scale = 0.5
         self.ts = None
         self.qs = None
@@ -607,7 +607,7 @@ class WasdInterface(object):
 
         start = np.array([robot_cur_odom.position.x, robot_cur_odom.position.y])
         goal = np.array([5.0, 0])
-        rrt_star = RRTStar(150, start, robot_cur_odom.position.z + 0.72, goal, self.mapping_path, self.o2n, self.offset, scale=self.colmap_scale)
+        rrt_star = RRTStar(300, start, robot_cur_odom.position.z + 0.72, goal, self.mapping_path, self.o2n, self.offset, scale=self.colmap_scale)
         rrt_star.run()
         rrt_star.getBestPath()
         path_mat = rrt_star.plotAll()

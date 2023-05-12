@@ -5,6 +5,9 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 import sys
 import os
+
+np.random.seed(0)
+
 # sys.path.insert(0, "/home/lishuo_p14s/nerf-navigation/NeRF/ngp_pl")  # TODO
 sys.path.insert(0, "/home/rahulsajnani/Education/Brown/1_sem2/52-O/project/nerf-navigation/NeRF/ngp_pl")  # TODO
 
@@ -44,7 +47,7 @@ class RRTStar:
         self.map_model = ngp_model(scale, map_model_checkpoint_path)
 
         # map info
-        self.h = 4
+        self.h = 3.6
         self.w = 6
         # self.sx = 0
         # self.sy = 0
@@ -281,7 +284,7 @@ class RRTStar:
 
     def getBestPath(self):
         clist = []
-        X_near_goal = self.findNearSet(self.goal, 0.2)
+        X_near_goal = self.findNearSet(self.goal, 0.4)
         if len(X_near_goal) == 0:
             self.best_cost.append(np.inf)
         else:
@@ -351,10 +354,10 @@ class RRTStar:
 
     def run(self):
         sample_iter = 0
-        # while (not self.path_found) or (sample_iter < self.n):
-        #     if sample_iter % 1 == 0:
-        #         print("sample points: ", sample_iter, "/", self.n) 
-        for i in tqdm.tqdm(range(self.n)):
+        while (not self.path_found) or (sample_iter < self.n):
+            if sample_iter % 10 == 0:
+                print("sample points: ", sample_iter, "/", self.n) 
+        # for i in tqdm.tqdm(range(self.n)):
             x_rand_loc = self.sample()
             self.x_nearest = self.nearest(x_rand_loc)
 
@@ -377,18 +380,18 @@ if __name__ == '__main__':
     height = 1
     goal = np.array([5, 0.2])
     
-    # parent_dir = "../../../../spot_data/" # TODO
-    # mapping_path = "../../../../spot_data/ckpts/spot_online/Spot/1_slim.ckpt" # TODO
+    parent_dir = "../../../../spot_data/" # TODO
+    mapping_path = "../../../../spot_data/ckpts/spot_online/Spot/1_slim.ckpt" # TODO
     
-    parent_dir = "../../../../spot_data_best/spot_data/" # TODO
-    mapping_path = "../../../../spot_data_best/spot_data/ckpts/spot_online/Spot/2_slim.ckpt" # TODO
+    # parent_dir = "../../../../spot_data_best/spot_data/" # TODO
+    # mapping_path = "../../../../spot_data_best/spot_data/ckpts/spot_online/Spot/2_slim.ckpt" # TODO
     
     colmap_scale = 0.5
     ts = np.load(os.path.join(parent_dir, "arr_2.npy"))
     qs = np.load(os.path.join(parent_dir, "arr_3.npy"))
     o2n, offset = get_odom_to_nerf_matrix(parent_dir, ts, qs, colmap_scale)
     
-    rrt_star = RRTStar(120, start, height, goal, mapping_path, o2n, offset, scale=colmap_scale)
+    rrt_star = RRTStar(80, start, height, goal, mapping_path, o2n, offset, scale=colmap_scale)
     map_model_checkpoint = ""
 
     rrt_star.run()
